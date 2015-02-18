@@ -1,0 +1,72 @@
+
+-- TEMPORARY DATA SETUP	
+	
+	CREATE TABLE TEST_MISSING_SKILL(
+	ks_code varchar(3));
+
+	CREATE TABLE TEST_COURSE_SKILL(
+	c_code varchar(4),
+	ks_code varchar(3));
+
+	CREATE TABLE TEST_MISSING_COURSE_FEE(
+	c_code varchar(4),
+	fee int	
+	);
+		
+	--DELETE FROM TEST_MISSING_SKILL;
+	INSERT INTO TEST_MISSING_SKILL VALUES ('101');
+	INSERT INTO TEST_MISSING_SKILL VALUES ('102');
+	INSERT INTO TEST_MISSING_SKILL VALUES ('104');
+	
+	--DELETE FROM TEST_COURSE_SKILL;
+	INSERT INTO TEST_COURSE_SKILL VALUES ('1001','101');
+	INSERT INTO TEST_COURSE_SKILL VALUES ('1001','102');
+	INSERT INTO TEST_COURSE_SKILL VALUES ('1002','101');
+	INSERT INTO TEST_COURSE_SKILL VALUES ('1002','103');
+	INSERT INTO TEST_COURSE_SKILL VALUES ('1002','102');
+	INSERT INTO TEST_COURSE_SKILL VALUES ('1003','101');
+	INSERT INTO TEST_COURSE_SKILL VALUES ('1003','103');
+	INSERT INTO TEST_COURSE_SKILL VALUES ('1004','103');
+	INSERT INTO TEST_COURSE_SKILL VALUES ('1004','102');
+	INSERT INTO TEST_COURSE_SKILL VALUES ('1004','104');
+	
+	--DELETE FROM TEST_MISSING_COURSE_FEE;
+	INSERT INTO TEST_MISSING_COURSE_FEE VALUES ('1001', 15);
+	INSERT INTO TEST_MISSING_COURSE_FEE VALUES ('1002', 15);
+	INSERT INTO TEST_MISSING_COURSE_FEE VALUES ('1003', 15);
+	INSERT INTO TEST_MISSING_COURSE_FEE VALUES ('1004', 15); 
+
+-- THE QUERY	
+WITH COMBINATIONS (combination_id, combination_fee, course) AS (		
+	-- Parse the delimited strings and store in a table (COMBINATIONS). This table will be used to perform a division.
+	SELECT DISTINCT combination_id, combination_fee, 
+					SUBSTR(combination, INSTR(combination,'#',1,LEVEL)+1, 
+										INSTR(combination, '#', 1, LEVEL+1)- INSTR (combination, '#', 1, LEVEL)- 1) 
+								as course
+	FROM (-- Assign a combination id to each combination
+		  SELECT ROWNUM combination_id, combination, combination_fee FROM
+										-- All combinations of all orders of all the missing courses (in hash-delimited string format) 
+										-- and their corresponding total fees.
+										(SELECT a.combination, sum(b.fee) as combination_fee
+											FROM    (SELECT SYS_CONNECT_BY_PATH (c_code, '#') || '#' as combination
+             										FROM   TEST_MISSING_COURSE_FEE
+             										CONNECT BY c_code > PRIOR c_code) a, 
+             										TEST_MISSING_COURSE_FEE b
+    										WHERE    INSTR (a.combination, '#' || b.c_code || '#') > 0
+    										GROUP BY a.combination)
+    	  )
+	CONNECT BY LEVEL < LENGTH(combination) - LENGTH(REPLACE(combination,'#'))
+)
+
+-- Division to pull out only those combinations that make up the skill gap
+SELECT combination_id, course, combination_fee FROM COMBINATIONS C
+WHERE NOT EXISTS ((SELECT ks_code FROM TEST_MISSING_SKILL)
+					MINUS
+					(SELECT DISTINCT ks_code 
+					FROM TEST_COURSE_SKILL TCS, COMBINATIONS C_INNER
+                    WHERE TCS.c_code = C_INNER.course
+                    AND	C_INNER.combination_id = C.combination_id))
+ORDER BY combination_fee, combination_id, course                     
+
+	
+	

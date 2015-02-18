@@ -1,0 +1,57 @@
+
+Personal information service
+-----------------------
+ContactInfo personContactInfo(personID)
+String personPositionInfo(personID)
+Date personSeniorityInfo(personID)
+
+
+
+Position-skill management
+-------------
+void addSkill(positionID)
+void dropSkill(positionID)
+String[] positionSkill(positionID) – query
+String[] possiblePosition(personID)
+
+Pay calculation service
+---------
+double personPayable(personID)
+int makePayroll(departmentID)
+
+Personal skill possession service
+-----------
+String[] personSkill(personID) – a person’s skills
+String[] personCertificate(personID) – a person’s certificates
+Int[] skillCall(skillID[ ]) – enumeration of the persons who possess the skills
+Int[] certificateCall(certID) enumeration of the persons who possess the certificate
+void updateTrainingStatus(personID, knowledgeSkillInfo[ ])
+
+
+Training counseling service
+----------
+String[] missingSkill(personID, positionID)
+String[] recommendCourse(personID, positionID)
+-- find the person’s skills by calling personSkill in the “Person skill possession service”,
+-- find the required skills of the position by calling positionSkill in the “Position-skill
+-- management” service, and call recommendCourse in Catalog service.
+int completeCourse(personID, courseID) – add the skills and certificate to the person’s
+possession
+
+Catalog services
+--------------
+CourseInfo courseInfo(courseID) -- query, CourseInfo includes the skills/knowledge covered by
+the course as well as the level information
+String[] courseInfoChange(knowledgeAreaName, date) -- list the courses that are changed in an
+area since the date
+String[] areaCall(knowledgeAreaName) -- list the courses in an area
+String[] newAreaCall(knowledgeAreaName, date) -- list the courses in an area since the date
+String[] dropAreaCall(knowledgeAreaName, date) -- list the discontinued courses in an area
+since the date
+String[] recommendCourse(skillIDs) – skillIDs is a list
+
+Training Report services
+--------
+GradeSet getGrade(person_id) -- list the courses and corresponding earned grades
+GradeSet getGrade(person_id, year) -- list the courses and the earned grades in the given year
+String getGrade(person_id, session_id) -- list the grade of the person in the session

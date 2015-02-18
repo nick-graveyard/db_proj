@@ -1,0 +1,95 @@
+
+WITH MISSING_SKILL (ks_code) AS
+	(SELECT ks_code
+	FROM job NATURAL JOIN position_required_skill
+	WHERE job_code = 20001
+	MINUS
+	SELECT ks_code
+	FROM person_k_skills
+	WHERE person_id = 198700001),
+
+	MISSING_COURSE_SKILL (c_code, ks_code)	AS
+	(SELECT c_code, ks_code
+	FROM course_content NATURAL JOIN lu_k_skills NATURAL JOIN MISSING_SKILL),
+	
+
+	MISSING_COURSE (c_code) AS
+	(SELECT DISTINCT c_code FROM MISSING_COURSE_SKILL),
+	
+	MISSING_SESSION_FEE (session_id,fee) AS
+	(SELECT session_id, price FROM c_session cs, MISSING_COURSE mc 
+	WHERE cs.start_date >= (SELECT SYSDATE FROM DUAL) AND cs.end_date <= TO_DATE('2013-01-01','YYYY-MM-DD')
+	AND cs.c_code = mc.c_code 
+	AND cs.price = (SELECT MIN(price) FROM c_session
+					WHERE c_code = cs.c_code)),
+					
+	MISSING_SESSION (session_id) AS
+	(SELECT DISTINCT session_id FROM MISSING_SESSION_FEE)
+	
+SELECT SYS_CONNECT_BY_PATH (session_id, '#') || '#' as combination
+FROM   MISSING_SESSION_FEE
+CONNECT BY session_id > PRIOR session_id
+WHERE NOT EXISTS ((SELECT ks_code FROM MISSING_SKILL)
+					MINUS
+					(SELECT DISTINCT ks_code 
+					FROM MISSING_COURSE_SKILL TCS, c_session cs
+                    WHERE TCS.c_code = cs.c_code
+                    AND	INSTR (combination, '#' || cs.session_id || '#') > 0))
+	
+ SELECT ROWNUM combination_id, combination, combination_fee FROM
+	-- All combinations that make up the skill gap (in hash-delimited string format) 
+	-- and their corresponding total fees.
+	(SELECT a.combination, sum(b.fee) as combination_fee
+											FROM    ( SELECT c.combination FROM 
+														(SELECT SYS_CONNECT_BY_PATH (session_id, '#') || '#' as combination
+             											FROM   MISSING_SESSION_FEE
+             											CONNECT BY session_id > PRIOR session_id) c
+             										  	WHERE NOT EXISTS ((SELECT ks_code FROM MISSING_SKILL)
+																			MINUS
+																		  (SELECT DISTINCT ks_code 
+																			FROM MISSING_COURSE_SKILL TCS, c_session cs
+                    														WHERE TCS.c_code = cs.c_code
+                    														AND	INSTR (c.combination, '#' || cs.session_id || '#') > 0))) a, 
+             										MISSING_SESSION_FEE b
+    										WHERE    INSTR (a.combination, '#' || b.session_id || '#') > 0
+    										GROUP BY a.combination)
+	
+	COMBINATIONS_DELIMITED (combination_id, combination, combination_fee) AS
+	(-- Assign a combination id to each combination
+	SELECT ROWNUM combination_id, combination, combination_fee FROM
+	-- All combinations that make up the skill gap (in hash-delimited string format) 
+	-- and their corresponding total fees.
+	(SELECT a.combination, sum(b.fee) as combination_fee
+											FROM    ( SELECT c.combination FROM 
+														(SELECT SYS_CONNECT_BY_PATH (session_id, '#') || '#' as combination
+             											FROM   MISSING_SESSION_FEE
+             											CONNECT BY session_id > PRIOR session_id) c
+             										  	WHERE NOT EXISTS ((SELECT ks_code FROM MISSING_SKILL)
+																			MINUS
+																		  (SELECT DISTINCT ks_code 
+																			FROM MISSING_COURSE_SKILL TCS, c_session cs
+                    														WHERE TCS.c_code = cs.c_code
+                    														AND	INSTR (c.combination, '#' || cs.session_id || '#') > 0))) a, 
+             										MISSING_SESSION_FEE b
+    										WHERE    INSTR (a.combination, '#' || b.session_id || '#') > 0
+    										GROUP BY a.combination)), 
+    										
+    CHEAPEST_COMBINATION (combination_id, combination, combination_fee)	AS
+    (SELECT combination_id, combination, combination_fee FROM COMBINATIONS_DELIMITED
+    	WHERE combination_fee = (select min(combination_fee) from COMBINATIONS_DELIMITED)),
+    										
+	PARSED_COMBINATIONS (combination_id, combination_fee, session_id) AS (		
+	-- Parse the delimited strings and store in a table (COMBINATIONS). This table will be used to perform a division.
+	SELECT DISTINCT combination_id, combination_fee, 
+					SUBSTR(combination, INSTR(combination,'#',1,LEVEL)+1, 
+										INSTR(combination, '#', 1, LEVEL+1)- INSTR (combination, '#', 1, LEVEL)- 1) 
+								as session_id
+	FROM CHEAPEST_COMBINATION
+	CONNECT BY LEVEL < LENGTH(combination) - LENGTH(REPLACE(combination,'#')))
+
+-- Division to pull out only those combinations that make up the skill gap
+SELECT combination_id, session_id, combination_fee FROM PARSED_COMBINATIONS C
+ORDER BY combination_fee, combination_id, session_id                     
+
+	
+	
